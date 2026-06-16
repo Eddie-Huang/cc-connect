@@ -188,6 +188,8 @@ const (
 	MsgPermissionPrompt          MsgKey = "permission_prompt"
 	MsgPermissionAllowed         MsgKey = "permission_allowed"
 	MsgPermissionApproveAll      MsgKey = "permission_approve_all"
+	MsgApproveAllRevoked         MsgKey = "approve_all_revoked"
+	MsgApproveAllAlreadyOff      MsgKey = "approve_all_already_off"
 	MsgPermissionDenied          MsgKey = "permission_denied_msg"
 	MsgPermissionHint            MsgKey = "permission_hint"
 	MsgQuietOn                   MsgKey = "quiet_on"
@@ -855,6 +857,20 @@ var messages = map[MsgKey]map[Language]string{
 		LangTraditionalChinese: "✅ 本次會話已開啟自動批准，後續權限請求將自動允許。",
 		LangJapanese:           "✅ このセッションの全ての権限を自動承認に設定しました。",
 		LangSpanish:            "✅ Todos los permisos se aprobarán automáticamente en esta sesión.",
+	},
+	MsgApproveAllRevoked: {
+		LangEnglish:            "🔒 Approve-all turned off. Permission and plan approvals will be asked again.",
+		LangChinese:            "🔒 已收回「全部允许」。后续权限与计划审批将重新征求你的确认。",
+		LangTraditionalChinese: "🔒 已收回「全部允許」。後續權限與計畫審批將重新徵求你的確認。",
+		LangJapanese:           "🔒 自動承認を解除しました。今後の権限・プラン承認は再度確認します。",
+		LangSpanish:            "🔒 Aprobación automática desactivada. Se volverá a pedir confirmación para permisos y planes.",
+	},
+	MsgApproveAllAlreadyOff: {
+		LangEnglish:            "ℹ️ Approve-all is not active for this session.",
+		LangChinese:            "ℹ️ 本次会话当前并未开启「全部允许」。",
+		LangTraditionalChinese: "ℹ️ 本次會話目前並未開啟「全部允許」。",
+		LangJapanese:           "ℹ️ このセッションでは自動承認は有効になっていません。",
+		LangSpanish:            "ℹ️ La aprobación automática no está activa en esta sesión.",
 	},
 	MsgPermissionDenied: {
 		LangEnglish:            "❌ Denied. Agent will stop this tool use.",
