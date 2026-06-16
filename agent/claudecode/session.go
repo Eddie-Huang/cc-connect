@@ -64,6 +64,12 @@ type claudeSession struct {
 	// startupWarning holds a one-time message to surface to the IM user at
 	// session start (e.g. when a permission mode was silently downgraded).
 	startupWarning string
+
+	// promptFiles are temp files holding the (possibly huge) system / append
+	// system prompts. On Windows the prompts are passed via --system-prompt-file
+	// / --append-system-prompt-file to avoid the cmd.exe ~8KB command-line limit.
+	// They are removed in Close().
+	promptFiles []string
 }
 
 // StartupWarning implements core.StartupWarner. Returns a non-empty string
@@ -88,6 +94,28 @@ func buildAppendSystemPrompt(agentPrompt, platformPrompt, userAppend string) str
 		parts = append(parts, userAppend)
 	}
 	return strings.Join(parts, "\n")
+}
+
+// writeSystemPromptToFile writes a system-prompt string to a temp file and
+// returns its path. Used so that large prompts are passed to Claude via the
+// --system-prompt-file / --append-system-prompt-file flags instead of inline
+// command-line arguments, which on Windows would exceed cmd.exe's ~8KB limit.
+// The returned path is tracked on the claudeSession and removed in Close().
+func writeSystemPromptToFile(content string) (string, error) {
+	f, err := os.CreateTemp("", "cc-connect-sysprompt-*.txt")
+	if err != nil {
+		return "", err
+	}
+	if _, err := f.WriteString(content); err != nil {
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(f.Name())
+		return "", err
+	}
+	return f.Name(), nil
 }
 
 func newClaudeSession(ctx context.Context, workDir, cliBin string, cliExtraArgs []string, cliArgsFlag string, model, effort, sessionID, mode, systemPrompt, appendSystemPrompt string, allowedTools, disallowedTools []string, extraEnv []string, platformPrompt string, disableVerbose bool, spawnOpts core.SpawnOptions, maxContextTokens int) (*claudeSession, error) {
@@ -115,6 +143,23 @@ func newClaudeSession(ctx context.Context, workDir, cliBin string, cliExtraArgs 
 		innerArgs = append(innerArgs, "--verbose")
 	}
 
+	// promptFiles tracks temp files created for --system-prompt-file /
+	// --append-system-prompt-file so they can be cleaned up in Close().
+	var promptFiles []string
+	cleanupPromptFiles := func() {
+		for _, p := range promptFiles {
+			_ = os.Remove(p)
+		}
+	}
+	// If we fail before the session takes ownership of these temp files,
+	// remove them on the way out. Set to true once handed off to cs.
+	promptFilesHandedOff := false
+	defer func() {
+		if !promptFilesHandedOff {
+			cleanupPromptFiles()
+		}
+	}()
+
 	if mode != "" && mode != "default" {
 		innerArgs = append(innerArgs, "--permission-mode", mode)
 	}
@@ -134,8 +179,17 @@ func newClaudeSession(ctx context.Context, workDir, cliBin string, cliExtraArgs 
 	}
 
 	// Handle custom system prompt (replaces Claude's default system prompt).
+	// Pass via a temp file (--system-prompt-file) so large prompts do not blow
+	// past the Windows cmd.exe command-line length limit.
 	if systemPrompt != "" {
-		innerArgs = append(innerArgs, "--system-prompt", systemPrompt)
+		pf, err := writeSystemPromptToFile(systemPrompt)
+		if err != nil {
+			cleanupPromptFiles()
+			cancel()
+			return nil, fmt.Errorf("claudeSession: write system prompt file: %w", err)
+		}
+		promptFiles = append(promptFiles, pf)
+		innerArgs = append(innerArgs, "--system-prompt-file", pf)
 	}
 
 	// Append the cc-connect functionality prompt, platform formatting hints,
@@ -143,7 +197,14 @@ func newClaudeSession(ctx context.Context, workDir, cliBin string, cliExtraArgs 
 	// --append-system-prompt only honors its last occurrence, so the pieces
 	// must be concatenated here rather than passed as repeated flags.
 	if appended := buildAppendSystemPrompt(core.AgentSystemPrompt(), platformPrompt, appendSystemPrompt); appended != "" {
-		innerArgs = append(innerArgs, "--append-system-prompt", appended)
+		pf, err := writeSystemPromptToFile(appended)
+		if err != nil {
+			cleanupPromptFiles()
+			cancel()
+			return nil, fmt.Errorf("claudeSession: write append system prompt file: %w", err)
+		}
+		promptFiles = append(promptFiles, pf)
+		innerArgs = append(innerArgs, "--append-system-prompt-file", pf)
 	}
 
 	if effort != "" {
@@ -266,7 +327,9 @@ func newClaudeSession(ctx context.Context, workDir, cliBin string, cliExtraArgs 
 		gracefulStopTimeout: 120 * time.Second,
 		ccHooks:             newCCPermissionHookRunner(workDir),
 		startupWarning:      rootDowngradeWarning,
+		promptFiles:         promptFiles,
 	}
+	promptFilesHandedOff = true
 	cs.setPermissionMode(mode)
 	cs.sessionID.Store(sessionID)
 	cs.alive.Store(true)
@@ -931,6 +994,7 @@ func (cs *claudeSession) Close() error {
 	select {
 	case <-cs.done:
 		slog.Info("claudeSession: exited cleanly after stdin close")
+		cs.removePromptFiles()
 		return nil
 	case <-time.After(graceful):
 		slog.Warn("claudeSession: graceful stop timed out, sending SIGTERM",
@@ -947,6 +1011,7 @@ func (cs *claudeSession) Close() error {
 	select {
 	case <-cs.done:
 		slog.Info("claudeSession: exited after SIGTERM")
+		cs.removePromptFiles()
 		return nil
 	case <-time.After(5 * time.Second):
 		slog.Warn("claudeSession: SIGTERM timed out, sending SIGKILL")
@@ -961,7 +1026,17 @@ func (cs *claudeSession) Close() error {
 		slog.Warn("claudeSession: force kill", "error", err)
 	}
 	<-cs.done
+	cs.removePromptFiles()
 	return nil
+}
+
+// removePromptFiles deletes the temp system-prompt files created for this
+// session (see writeSystemPromptToFile). Safe to call multiple times.
+func (cs *claudeSession) removePromptFiles() {
+	for _, p := range cs.promptFiles {
+		_ = os.Remove(p)
+	}
+	cs.promptFiles = nil
 }
 
 // shellJoinArgs joins args into a single string, quoting any arg that
