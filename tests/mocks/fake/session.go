@@ -224,3 +224,5 @@ func NewFakeAgentWithSession(name, sessionID string, session *FakeAgentSession) 
 		},
 	}
 }
+
+func (*FakeAgentSession) SetStripImages(bool) {} // no-op

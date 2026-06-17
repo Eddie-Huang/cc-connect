@@ -602,3 +602,5 @@ func extractSessionSummary(sf *sessionFile) string {
 	}
 	return sf.SessionID
 }
+
+func (*geminiSession) SetStripImages(bool) {} // no-op: vision model switching is claudecode-only

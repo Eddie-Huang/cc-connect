@@ -538,3 +538,5 @@ var (
 	_ core.ContextCompressor               = (*Agent)(nil)
 	_ core.ProviderSwitcher                = (*Agent)(nil)
 )
+
+func (*copilotSession) SetStripImages(bool) {} // no-op: vision model switching is claudecode-only

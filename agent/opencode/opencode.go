@@ -722,3 +722,5 @@ func querySessionTitle(sessionID string) string {
 	title := strings.TrimSpace(string(out))
 	return title
 }
+
+func (*opencodeSession) SetStripImages(bool) {} // no-op: vision model switching is claudecode-only

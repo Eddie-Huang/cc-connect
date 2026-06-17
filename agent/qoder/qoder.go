@@ -177,3 +177,5 @@ func (a *Agent) GlobalMemoryFile() string {
 	}
 	return filepath.Join(homeDir, ".qoder", "AGENTS.md")
 }
+
+func (*qoderSession) SetStripImages(bool) {} // no-op: vision model switching is claudecode-only

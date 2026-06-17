@@ -370,3 +370,5 @@ func (a *Agent) reportListSupported(supported bool) {
 		a.listUnsupported.Store(false)
 	}
 }
+
+func (*acpSession) SetStripImages(bool) {} // no-op: vision model switching is claudecode-only

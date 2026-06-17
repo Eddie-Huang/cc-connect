@@ -577,3 +577,5 @@ func readPiHistory(path string, limit int) ([]core.HistoryEntry, error) {
 	}
 	return all, nil
 }
+
+func (*piSession) SetStripImages(bool) {} // no-op: vision model switching is claudecode-only

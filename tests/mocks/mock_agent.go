@@ -394,3 +394,5 @@ func (r *MockEventReader) Read(p []byte) (n int, err error) {
 	copy(p, data)
 	return len(data), nil
 }
+
+func (*MockAgentSession) SetStripImages(bool) {} // no-op

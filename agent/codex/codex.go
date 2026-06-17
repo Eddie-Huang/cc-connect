@@ -706,3 +706,7 @@ func (a *Agent) PermissionModes() []core.PermissionModeInfo {
 			DescZh: "跳过所有审批和沙箱（危险）"},
 	}
 }
+
+func (*codexSession) SetStripImages(bool) {} // no-op: vision model switching is claudecode-only
+
+func (*appServerSession) SetStripImages(bool) {} // no-op

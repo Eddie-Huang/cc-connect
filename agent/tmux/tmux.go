@@ -327,3 +327,5 @@ func (a *Agent) GetWorkDir() string {
 	defer a.mu.RUnlock()
 	return a.workDir
 }
+
+func (*tmuxSession) SetStripImages(bool) {} // no-op: vision model switching is claudecode-only

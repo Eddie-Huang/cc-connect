@@ -478,3 +478,5 @@ func iflowResolvedWorkDir(workDir string) string {
 	}
 	return absDir
 }
+
+func (*iflowSession) SetStripImages(bool) {} // no-op: vision model switching is claudecode-only

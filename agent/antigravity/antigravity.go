@@ -564,3 +564,5 @@ func listAntigravitySessions(workDir string) ([]core.AgentSessionInfo, error) {
 
 	return sessions, nil
 }
+
+func (*antigravitySession) SetStripImages(bool) {} // no-op: vision model switching is claudecode-only

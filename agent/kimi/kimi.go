@@ -459,3 +459,5 @@ func findKimiSessionDir(sessionID string) string {
 	}
 	return ""
 }
+
+func (*kimiSession) SetStripImages(bool) {} // no-op: vision model switching is claudecode-only

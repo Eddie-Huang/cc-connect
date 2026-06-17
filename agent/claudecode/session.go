@@ -43,6 +43,13 @@ type claudeSession struct {
 	done            chan struct{}
 	alive           atomic.Bool
 
+	// stripImages causes Send to omit base64 image data from the stdin JSON.
+	// Images are still saved to disk and their paths are included in the text,
+	// so Claude Code can read them with its built-in Read tool. This allows
+	// non-vision models (e.g. mimo-v2.5-pro) to handle image messages without
+	// triggering the vision API which they don't support.
+	stripImages atomic.Bool
+
 	// activeModel stores the model id reported by the CLI's init event (e.g.
 	// "claude-opus-4-7[1m]"). It may be empty if the init event hasn't
 	// carried a model field yet; callers should fall back to the Agent's
@@ -768,6 +775,7 @@ func (cs *claudeSession) Send(prompt string, images []core.ImageAttachment, file
 
 	var parts []map[string]any
 	var savedPaths []string
+	shouldStrip := cs.stripImages.Load()
 
 	// Save and encode images
 	for i, img := range images {
@@ -781,18 +789,23 @@ func (cs *claudeSession) Send(prompt string, images []core.ImageAttachment, file
 		savedPaths = append(savedPaths, fpath)
 		slog.Debug("claudeSession: image saved", "path", fpath, "size", len(img.Data))
 
-		mimeType := img.MimeType
-		if mimeType == "" {
-			mimeType = "image/png"
+		// Only include base64 image data when the model supports vision.
+		// When stripImages is true, images are saved to disk only and
+		// Claude Code reads them via its built-in Read tool.
+		if !shouldStrip {
+			mimeType := img.MimeType
+			if mimeType == "" {
+				mimeType = "image/png"
+			}
+			parts = append(parts, map[string]any{
+				"type": "image",
+				"source": map[string]any{
+					"type":       "base64",
+					"media_type": mimeType,
+					"data":       base64.StdEncoding.EncodeToString(img.Data),
+				},
+			})
 		}
-		parts = append(parts, map[string]any{
-			"type": "image",
-			"source": map[string]any{
-				"type":       "base64",
-				"media_type": mimeType,
-				"data":       base64.StdEncoding.EncodeToString(img.Data),
-			},
-		})
 	}
 
 	// Save files to disk so Claude Code can read them
@@ -806,7 +819,7 @@ func (cs *claudeSession) Send(prompt string, images []core.ImageAttachment, file
 		textPart = "Please analyze the attached image(s)."
 	}
 	if len(savedPaths) > 0 {
-		textPart += "\n\n(Images also saved locally: " + strings.Join(savedPaths, ", ") + ")"
+		textPart += "\n\n(Images saved locally, please read and analyze them: " + strings.Join(savedPaths, ", ") + ")"
 	}
 	if len(filePaths) > 0 {
 		textPart += "\n\n(Files saved locally, please read them: " + strings.Join(filePaths, ", ") + ")"
@@ -954,6 +967,15 @@ func (cs *claudeSession) GetModel() string {
 		return v
 	}
 	return ""
+}
+
+// SetStripImages controls whether Send omits base64 image data from stdin.
+// When true, images are saved to disk only and Claude Code reads them via
+// its built-in Read tool. This allows non-vision models to handle image
+// messages without triggering the vision API.
+func (cs *claudeSession) SetStripImages(strip bool) {
+	cs.stripImages.Store(strip)
+	slog.Debug("claudeSession: stripImages set", "strip", strip)
 }
 
 // GetWorkDir returns the working directory this session was started in.

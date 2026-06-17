@@ -683,3 +683,5 @@ func countSessionMessages(dbPath, rootBlobID string) (int, string) {
 
 	return msgCount, firstUserMsg
 }
+
+func (*cursorSession) SetStripImages(bool) {} // no-op: vision model switching is claudecode-only

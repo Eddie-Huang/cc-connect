@@ -403,6 +403,9 @@ type AgentSession interface {
 	Alive() bool
 	// Close terminates the session and its underlying process.
 	Close() error
+	// SetStripImages controls whether image data is omitted from stdin.
+	// When true, images are saved to disk only (paths included in text).
+	SetStripImages(strip bool)
 }
 
 // PermissionResult represents the user's decision on a permission request.
