@@ -1,4 +1,4 @@
-package wecom
+﻿package wecom
 
 import (
 	"context"
@@ -23,7 +23,7 @@ const (
 )
 
 // WSPlatform implements core.Platform using the WeChat Work WebSocket long-connection
-// mode (智能机器人长连接). No public URL, no message encryption, no IP allowlist required.
+// mode (鏅鸿兘鏈哄櫒浜洪暱杩炴帴). No public URL, no message encryption, no IP allowlist required.
 type WSPlatform struct {
 	botID       string
 	secret      string
@@ -89,7 +89,7 @@ type wsMsgCallbackBody struct {
 	Text    struct {
 		Content string `json:"content"`
 	} `json:"text"`
-	// Voice: official field is content; some payloads used text — accept both.
+	// Voice: official field is content; some payloads used text 鈥?accept both.
 	Voice struct {
 		Text    string `json:"text,omitempty"`
 		Content string `json:"content,omitempty"`
@@ -149,7 +149,7 @@ func (p *WSPlatform) Start(handler core.MessageHandler) error {
 }
 
 // connectLoop establishes the WebSocket connection and reconnects on failure with
-// exponential backoff (1s → 2s → 4s → ... → 30s max).
+// exponential backoff (1s 鈫?2s 鈫?4s 鈫?... 鈫?30s max).
 func (p *WSPlatform) connectLoop() {
 	backoff := time.Second
 	for {
@@ -205,7 +205,7 @@ func (p *WSPlatform) runConnection() error {
 
 		// Drain pending ACK channels so waiting goroutines are unblocked
 		// and stale entries do not accumulate across reconnections.
-		// Collect keys first, then delete — Range+Delete in callback is
+		// Collect keys first, then delete 鈥?Range+Delete in callback is
 		// not guaranteed safe by the sync.Map contract.
 		var staleKeys []any
 		p.pendingAcks.Range(func(key, value any) bool {
@@ -473,24 +473,28 @@ func (p *WSPlatform) Reply(ctx context.Context, rctx any, content string) error 
 		return nil
 	}
 
-	streamID := p.generateReqID("stream")
-	frame := map[string]any{
-		"cmd":     "aibot_respond_msg",
-		"headers": map[string]string{"req_id": rc.reqID},
-		"body": map[string]any{
-			"msgtype": "stream",
-			"stream": map[string]any{
-				"id":      streamID,
-				"finish":  true,
-				"content": content,
+	chunks := splitByBytes(content, 1024)
+	for i, chunk := range chunks {
+		streamID := p.generateReqID("stream")
+		finish := i == len(chunks)-1
+		frame := map[string]any{
+			"cmd":     "aibot_respond_msg",
+			"headers": map[string]string{"req_id": rc.reqID},
+			"body": map[string]any{
+				"msgtype": "stream",
+				"stream": map[string]any{
+					"id":      streamID,
+					"finish":  finish,
+					"content": chunk,
+				},
 			},
-		},
+		}
+		if err := p.writeJSON(frame); err != nil {
+			slog.Error("wecom-ws: reply failed", "user", rc.userID, "chunk", i, "error", err)
+			return err
+		}
 	}
-	if err := p.writeJSON(frame); err != nil {
-		slog.Error("wecom-ws: reply failed", "user", rc.userID, "error", err)
-		return err
-	}
-	slog.Debug("wecom-ws: reply sent", "user", rc.userID, "len", len(content))
+	slog.Debug("wecom-ws: reply sent", "user", rc.userID, "chunks", len(chunks), "total_len", len(content))
 	return nil
 }
 
@@ -509,7 +513,7 @@ func (p *WSPlatform) Send(ctx context.Context, rctx any, content string) error {
 		return fmt.Errorf("wecom-ws: chatID is empty, cannot send proactive message")
 	}
 
-	chunks := splitByBytes(content, 2000)
+	chunks := splitByBytes(content, 1024)
 	for i, chunk := range chunks {
 		reqID := p.generateReqID("aibot_send_msg")
 		frame := map[string]any{
@@ -535,7 +539,7 @@ func (p *WSPlatform) Send(ctx context.Context, rctx any, content string) error {
 // ReconstructReplyCtx rebuilds a reply context from a session key.
 // Session key format: "wecom:{chatID}:{userID}".
 // The reconstructed context has no req_id, so Reply() (which needs req_id for
-// aibot_respond_msg) won't work — the engine should use Send() (aibot_send_msg)
+// aibot_respond_msg) won't work 鈥?the engine should use Send() (aibot_send_msg)
 // for cron/relay scenarios.
 func (p *WSPlatform) ReconstructReplyCtx(sessionKey string) (any, error) {
 	// wecom:{chatID}:{userID}
